@@ -73,3 +73,15 @@ create table if not exists contacts (
   updated_at     timestamptz not null default now()
 );
 create index if not exists contacts_event on contacts(event_id);
+
+-- Data fix (idempotent): "+91 98450 12345" -> "(+91) 98450 12345" in phone fields.
+-- Google Sheets / Excel read a cell starting with "+" as a formula (#ERROR!). Same rule as src/lib/phone.ts.
+update contacts c set data = c.data || (
+  select coalesce(jsonb_object_agg(k, regexp_replace(c.data->>k, '(^|;[[:space:]]*)[+][[:space:]]*([0-9]{1,4})(?=[[:space:].(-])[[:space:].-]*', '\1(+\2) ', 'g')), '{}'::jsonb)
+  from unnest(array['mobilePhones','officePhones','faxNumbers','otherPhones','whatsapp']) k
+  where c.data ? k
+)
+where exists (
+  select 1 from unnest(array['mobilePhones','officePhones','faxNumbers','otherPhones','whatsapp']) k
+  where c.data->>k ~ '(^|;[[:space:]]*)[+][[:space:]]*[0-9]{1,4}[[:space:].(-]'
+);

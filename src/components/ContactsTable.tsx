@@ -29,6 +29,7 @@ import {
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { CONTACT_FIELDS, META_COLUMNS, metaValue, type ContactData, type ContactRow, type FieldKey, type MetaKey } from "@/lib/fields";
 import { api, Badge, Button, goToLogin, inputCls, Modal, toast } from "./ui";
+import { bracketCountryCode, PHONE_KEY_SET } from "@/lib/phone";
 
 const LABELS: Record<string, string> = Object.fromEntries([...CONTACT_FIELDS, ...META_COLUMNS].map((c) => [c.key, c.label]));
 const DEFAULT_VISIBILITY: VisibilityState = {
@@ -240,7 +241,11 @@ export function ContactsTable({
     ids.splice(firstMeta < 0 ? ids.length : firstMeta, 0, "addedBy");
     const header = ids.map((id) => LABELS[id]);
     const lines = source.map((r) =>
-      ids.map((id) => clean(META_KEYS.has(id) ? metaValue(r.original, id as MetaKey) : r.original.data[id as FieldKey])),
+      ids.map((id) => {
+        const v = clean(META_KEYS.has(id) ? metaValue(r.original, id as MetaKey) : r.original.data[id as FieldKey]);
+        // "+91 …" would be read as a formula by Google Sheets (#ERROR!); "(+91) …" pastes as text.
+        return PHONE_KEY_SET.has(id) ? bracketCountryCode(v) : v;
+      }),
     );
     await copyText([header, ...lines].map((l) => l.join("\t")).join("\n"));
     toast(`Copied ${source.length} row${source.length === 1 ? "" : "s"}. Paste into cell A1 of your Google Sheet.`);

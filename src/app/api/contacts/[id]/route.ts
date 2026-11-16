@@ -3,6 +3,8 @@ import { sql } from "@/lib/db";
 import { handle, HttpError, isUuid, requireEventRole } from "@/lib/access";
 import { FIELD_KEYS, type ContactData } from "@/lib/fields";
 import { refreshDuplicates } from "@/lib/contacts";
+import { PHONE_KEY_SET } from "@/lib/phone";
+import { formatPhoneList } from "@/lib/extract/normalize";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -23,7 +25,8 @@ export const PATCH = handle(async (req: Request, { params }: Ctx) => {
   const next: ContactData = { ...c.data };
   for (const key of FIELD_KEYS) {
     if (body?.data && key in body.data) {
-      const v = String(body.data[key] ?? "").trim().slice(0, 5000);
+      let v = String(body.data[key] ?? "").trim().slice(0, 5000);
+      if (PHONE_KEY_SET.has(key)) v = formatPhoneList(v);
       if (v) next[key] = v;
       else delete next[key];
     }

@@ -3,6 +3,7 @@ import { sql } from "@/lib/db";
 import { handle, HttpError, isUuid, requireEventRole } from "@/lib/access";
 import { listContacts } from "@/lib/contacts";
 import { CONTACT_FIELDS, META_COLUMNS } from "@/lib/fields";
+import { bracketCountryCode, PHONE_KEY_SET } from "@/lib/phone";
 
 export const runtime = "nodejs";
 type Ctx = { params: Promise<{ id: string }> };
@@ -28,7 +29,7 @@ export const GET = handle(async (req: Request, { params }: Ctx) => {
 
   const header = [...CONTACT_FIELDS.map((f) => f.label), ...META_COLUMNS.map((m) => m.label)];
   const rows = contacts.map((c) => [
-    ...CONTACT_FIELDS.map((f) => c.data[f.key] ?? ""),
+    ...CONTACT_FIELDS.map((f) => (PHONE_KEY_SET.has(f.key) ? bracketCountryCode(c.data[f.key] ?? "") : (c.data[f.key] ?? ""))),
     c.addedByName || c.addedByEmail,
     new Date(c.createdAt),
     c.isDuplicate ? "Yes" : "",

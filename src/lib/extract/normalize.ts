@@ -1,5 +1,6 @@
 import { parsePhoneNumberFromString, type CountryCode } from "libphonenumber-js";
 import { FIELD_KEYS, type ContactData, type FieldKey } from "@/lib/fields";
+import { bracketCountryCode } from "@/lib/phone";
 
 const LIST_FIELDS = new Set(["emails", "mobilePhones", "officePhones", "faxNumbers", "otherPhones", "otherSocials"]);
 const PHONE_FIELDS = new Set(["mobilePhones", "officePhones", "faxNumbers", "otherPhones"]);
@@ -8,12 +9,23 @@ const KNOWN = new Set<string>(FIELD_KEYS);
 function formatPhone(p: string) {
   const country = (process.env.DEFAULT_PHONE_COUNTRY || undefined) as CountryCode | undefined;
   const ext = p.match(/(?:ext\.?|x)\s*(\d+)\s*$/i)?.[1];
-  const parsed = parsePhoneNumberFromString(p, country);
+  // Accept already-bracketed input like "(+91) 98450 12345".
+  const parsed = parsePhoneNumberFromString(p.replace(/^\s*\(\s*\+\s*(\d{1,4})\s*\)/, "+$1"), country);
   if (parsed && parsed.isPossible()) {
     const intl = parsed.formatInternational();
-    return ext && !parsed.ext ? `${intl} ext. ${ext}` : intl;
+    return bracketCountryCode(ext && !parsed.ext ? `${intl} ext. ${ext}` : intl);
   }
-  return p.trim();
+  return bracketCountryCode(p.trim());
+}
+
+/** Formats a "; "-separated list of phone numbers, e.g. "(+91) 98450 12345; (+91) 80 4123 4567". */
+export function formatPhoneList(value: string): string {
+  // Only plain phone numbers are reformatted (WhatsApp may hold a wa.me link instead).
+  return value
+    .split(/\s*;\s*/)
+    .filter(Boolean)
+    .map((p) => (/^[\s\d+()\-.]+(?:(?:ext\.?|x)\s*\d+)?$/i.test(p) ? formatPhone(p) : p))
+    .join("; ");
 }
 
 function str(v: unknown): string {
@@ -39,7 +51,7 @@ export function normalizeContact(c: Record<string, unknown>): ContactData {
       if (PHONE_FIELDS.has(k)) items = items.map(formatPhone);
       out[k as FieldKey] = [...new Set(items)].join("; ");
     } else {
-      out[k as FieldKey] = str(v);
+      out[k as FieldKey] = k === "whatsapp" ? formatPhoneList(str(v)) : str(v);
     }
   }
   if (extras.length) out.otherInfo = [out.otherInfo, ...extras].filter(Boolean).join("; ");
