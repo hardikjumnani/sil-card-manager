@@ -51,6 +51,11 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
               Continue with Google
             </button>
           </form>
+          <p className="mt-6 text-center text-xs text-slate-500">
+            By continuing you agree to our{" "}
+            <a href="/terms" className="underline hover:text-slate-700">Terms</a> and{" "}
+            <a href="/privacy" className="underline hover:text-slate-700">Privacy Policy</a>.
+          </p>
         </div>
       </section>
     </main>
