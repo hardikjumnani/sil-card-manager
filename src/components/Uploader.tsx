@@ -3,7 +3,7 @@
 import clsx from "clsx";
 import { AlertCircle, Camera, CheckCircle2, ImagePlus, Loader2, RotateCcw, Sparkles, Table2, X } from "lucide-react";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
-import { api, Badge, Button, formatBytes, ProgressBar, toast } from "./ui";
+import { api, Badge, Button, formatBytes, goToLogin, ProgressBar, toast } from "./ui";
 
 type Phase = "preparing" | "queued" | "uploading" | "uploaded" | "upload-failed";
 type ExtractState = "idle" | "queued" | "processing" | "done" | "failed";
@@ -85,6 +85,7 @@ function uploadWithProgress(url: string, blob: Blob, name: string, onProgress: (
       try {
         body = JSON.parse(xhr.responseText);
       } catch {}
+      if (xhr.status === 401) goToLogin();
       if (xhr.status >= 200 && xhr.status < 300 && body.id) resolve(body.id);
       else reject(new Error(body.error || `Upload failed (${xhr.status})`));
     };

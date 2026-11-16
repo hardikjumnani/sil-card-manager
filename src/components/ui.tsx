@@ -149,6 +149,13 @@ export function Toaster() {
 }
 
 /** fetch wrapper that throws the API's error message. */
+let redirectingToLogin = false;
+export function goToLogin() {
+  if (typeof window === "undefined" || redirectingToLogin) return;
+  redirectingToLogin = true;
+  window.location.href = `/login?callbackUrl=${encodeURIComponent(window.location.pathname + window.location.search)}`;
+}
+
 export async function api<T = unknown>(url: string, init?: RequestInit & { json?: unknown }): Promise<T> {
   const res = await fetch(url, {
     ...init,
@@ -156,6 +163,11 @@ export async function api<T = unknown>(url: string, init?: RequestInit & { json?
     body: init?.json !== undefined ? JSON.stringify(init.json) : init?.body,
   });
   const data = await res.json().catch(() => ({}));
+  if (res.status === 401) {
+    // Session expired or this domain has no session yet: sign in again and come back here.
+    goToLogin();
+    throw new Error("Your session has expired. Redirecting to sign in…");
+  }
   if (!res.ok) throw new Error((data as { error?: string }).error || `Request failed (${res.status})`);
   return data as T;
 }

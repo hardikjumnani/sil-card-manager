@@ -28,7 +28,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { CONTACT_FIELDS, META_COLUMNS, metaValue, type ContactData, type ContactRow, type FieldKey, type MetaKey } from "@/lib/fields";
-import { api, Badge, Button, inputCls, Modal, toast } from "./ui";
+import { api, Badge, Button, goToLogin, inputCls, Modal, toast } from "./ui";
 
 const LABELS: Record<string, string> = Object.fromEntries([...CONTACT_FIELDS, ...META_COLUMNS].map((c) => [c.key, c.label]));
 const DEFAULT_VISIBILITY: VisibilityState = {
@@ -497,6 +497,55 @@ function EditableCell({ value, editable, wide, onSave }: { value: string; editab
   );
 }
 
+/** Card photo with a clear message (and a way to sign in again) when it can't be loaded. */
+function CardImage({ id }: { id: string }) {
+  const [state, setState] = useState<"loading" | "ok" | "error">("loading");
+  const [reason, setReason] = useState("");
+  const [attempt, setAttempt] = useState(0);
+  const src = `/api/images/${id}`;
+  const onError = async () => {
+    setState("error");
+    // Find out why: an expired/missing session needs a fresh sign-in, anything else can be retried.
+    const res = await fetch(src, { method: "GET", headers: { accept: "application/json" } }).catch(() => null);
+    if (res?.status === 401) setReason("signed-out");
+    else if (res?.status === 404) setReason("missing");
+    else setReason("other");
+  };
+  if (state === "error") {
+    return (
+      <div className="flex aspect-[16/10] flex-col items-center justify-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 text-center text-sm text-slate-500">
+        {reason === "signed-out" ? (
+          <>
+            <span>Your session has expired, so the card image can't be shown.</span>
+            <Button size="sm" variant="primary" onClick={goToLogin}>Sign in again</Button>
+          </>
+        ) : reason === "missing" ? (
+          <span>This card image is no longer available.</span>
+        ) : (
+          <>
+            <span>Couldn't load the card image.</span>
+            <Button size="sm" onClick={() => { setState("loading"); setReason(""); setAttempt((a) => a + 1); }}>Retry</Button>
+          </>
+        )}
+      </div>
+    );
+  }
+  return (
+    <a href={src} target="_blank" rel="noreferrer" title="Open full size" className="relative block">
+      {state === "loading" && <div className="absolute inset-0 animate-pulse rounded-xl bg-slate-200/70" />}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        key={attempt}
+        src={src}
+        alt="Business card"
+        onLoad={() => setState("ok")}
+        onError={onError}
+        className="min-h-24 w-full rounded-xl border border-slate-200 bg-slate-50 object-contain"
+      />
+    </a>
+  );
+}
+
 function ReviewModal({
   row,
   canEdit,
@@ -534,10 +583,7 @@ function ReviewModal({
       <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
         <div className="md:sticky md:top-16 md:self-start">
           {row.cardImageId ? (
-            <a href={`/api/images/${row.cardImageId}`} target="_blank" rel="noreferrer" title="Open full size">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={`/api/images/${row.cardImageId}`} alt="Business card" className="w-full rounded-xl border border-slate-200 bg-slate-50 object-contain" />
-            </a>
+            <CardImage id={row.cardImageId} />
           ) : (
             <div className="flex aspect-[16/10] items-center justify-center rounded-xl bg-slate-100 text-sm text-slate-400">Image not available</div>
           )}

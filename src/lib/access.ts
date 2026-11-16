@@ -36,6 +36,14 @@ export function handle<A extends unknown[]>(fn: (...args: A) => Promise<Response
     try {
       return await fn(...args);
     } catch (e) {
+      // A signed-out browser opening an API link directly (e.g. a card image) goes to the login page, then comes back.
+      const req = args[0] instanceof Request ? args[0] : null;
+      if (e instanceof HttpError && e.status === 401 && req?.method === "GET" && req.headers.get("accept")?.includes("text/html")) {
+        const url = new URL(req.url);
+        const login = new URL("/login", url);
+        login.searchParams.set("callbackUrl", url.pathname + url.search);
+        return NextResponse.redirect(login, 303);
+      }
       if (e instanceof HttpError) return NextResponse.json({ error: e.message }, { status: e.status });
       console.error(e);
       return NextResponse.json({ error: "Something went wrong" }, { status: 500 });

@@ -4,9 +4,10 @@ import { ContactRound, FileSpreadsheet, ScanLine, Users } from "lucide-react";
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string; callbackUrl?: string }> }) {
   const session = await auth();
-  if (session?.user?.id) redirect("/events");
   const { error, callbackUrl } = await searchParams;
-  const redirectTo = callbackUrl?.startsWith("/") ? callbackUrl : "/events";
+  // Only same-site paths ("/x", not "//evil.com") are allowed as the return address.
+  const redirectTo = callbackUrl?.startsWith("/") && !callbackUrl.startsWith("//") ? callbackUrl : "/events";
+  if (session?.user?.id) redirect(redirectTo);
 
   return (
     <main className="flex min-h-screen flex-col lg:flex-row">
