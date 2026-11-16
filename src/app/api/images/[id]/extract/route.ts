@@ -51,6 +51,7 @@ export const POST = handle(async (_req: Request, { params }: Ctx) => {
 });
 
 function friendly(msg: string) {
+  if (/^AI busy/.test(msg)) return "The AI service is overloaded right now. Retry in a minute or two.";
   if (/429|quota|rate limited/i.test(msg)) {
     const mins = Number(msg.match(/retry in ~(\d+) min/)?.[1] ?? 1);
     return mins > 60

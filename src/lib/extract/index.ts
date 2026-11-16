@@ -6,19 +6,27 @@ export type ExtractResult = { contacts: ContactData[]; provider: string; raw: un
 
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
 const GEMINI_API_REVISION = process.env.GEMINI_API_REVISION || "2026-05-20";
-const DEFAULT_GEMINI_MODELS = "gemini-3.8-flash,gemini-3.5-flash-lite";
+const DEFAULT_GEMINI_MODELS = "gemini-3.5-flash-lite,gemini-3.8-flash";
 const DEFAULT_GROQ_MODEL = "qwen/qwen3.8-27b";
 
 /** Short waits are retried in place; longer ones move on to the next model. */
 const MAX_INLINE_WAIT_MS = 8000;
+/** Whole extraction must finish well inside the serverless limit (route maxDuration = 60s). */
+const TOTAL_BUDGET_MS = Number(process.env.EXTRACT_BUDGET_MS) || 50_000;
+/** One model call may take at most this long before we move on to the next model. */
+const CALL_TIMEOUT_MS = Number(process.env.EXTRACT_CALL_TIMEOUT_MS) || 22_000;
+/** An overloaded / timed-out model is skipped for this long. */
+const BUSY_COOLDOWN_MS = 2 * 60_000;
 
 class QuotaError extends Error {
   constructor(message: string, public retryAfterMs: number, public daily: boolean) {
     super(message);
   }
 }
-/** Transient problems (overload, malformed output) worth one more try. */
+/** Transient problems (malformed output) worth one more try on the same model. */
 class TransientError extends Error {}
+/** The model is overloaded (5xx) or too slow: move on to the next model right away. */
+class BusyError extends Error {}
 /** The request shape was rejected (used to fall back from Interactions to the legacy endpoint). */
 class BadRequestError extends Error {}
 
@@ -47,15 +55,16 @@ function quotaFromGemini(status: number, body: string): QuotaError | null {
 
 function checkResponse(provider: string, status: number, body: string) {
   if (status >= 200 && status < 300) return;
-  if (status >= 500) throw new TransientError(`${provider} ${status}: ${body.slice(0, 300)}`);
+  if (status >= 500) throw new BusyError(`${provider} ${status}: ${body.slice(0, 300)}`);
   if (status === 400 || status === 404) throw new BadRequestError(`${provider} ${status}: ${body.slice(0, 300)}`);
   throw new Error(`${provider} ${status}: ${body.slice(0, 300)}`);
 }
 
 /** Current Gemini API: POST /v1beta/interactions */
-async function geminiInteractions(model: string, b64: string, mime: string): Promise<unknown> {
+async function geminiInteractions(model: string, b64: string, mime: string, signal: AbortSignal): Promise<unknown> {
   const res = await fetch(`${GEMINI_BASE}/interactions`, {
     method: "POST",
+    signal,
     headers: {
       "Content-Type": "application/json",
       "x-goog-api-key": process.env.GEMINI_API_KEY!,
@@ -99,9 +108,10 @@ function interactionText(json: Record<string, unknown>): string {
 }
 
 /** Legacy Gemini API (still supported): POST /v1beta/models/{model}:generateContent */
-async function geminiGenerateContent(model: string, b64: string, mime: string): Promise<unknown> {
+async function geminiGenerateContent(model: string, b64: string, mime: string, signal: AbortSignal): Promise<unknown> {
   const res = await fetch(`${GEMINI_BASE}/models/${encodeURIComponent(model)}:generateContent`, {
     method: "POST",
+    signal,
     headers: { "Content-Type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY! },
     body: JSON.stringify({
       contents: [{ role: "user", parts: [{ text: EXTRACTION_PROMPT }, { inline_data: { mime_type: mime, data: b64 } }] }],
@@ -123,22 +133,23 @@ async function geminiGenerateContent(model: string, b64: string, mime: string): 
 
 /** Interactions first; if that request shape is rejected, the legacy endpoint is tried once. */
 let interactionsRejected = false;
-async function gemini(model: string, b64: string, mime: string) {
+async function gemini(model: string, b64: string, mime: string, signal: AbortSignal) {
   if (!interactionsRejected) {
     try {
-      return await geminiInteractions(model, b64, mime);
+      return await geminiInteractions(model, b64, mime, signal);
     } catch (e) {
       if (!(e instanceof BadRequestError)) throw e;
       console.warn("Gemini Interactions request rejected, using generateContent:", e.message);
       if (/not found|unknown|invalid json payload|cannot find field|api-revision/i.test(e.message)) interactionsRejected = true;
     }
   }
-  return geminiGenerateContent(model, b64, mime);
+  return geminiGenerateContent(model, b64, mime, signal);
 }
 
-async function groq(model: string, b64: string, mime: string): Promise<unknown> {
+async function groq(model: string, b64: string, mime: string, signal: AbortSignal): Promise<unknown> {
   const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
+    signal,
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
     body: JSON.stringify({
       model,
@@ -192,17 +203,17 @@ function toContacts(raw: unknown): ContactData[] {
     .filter((c) => Object.values(c).some((v) => v && v.trim()));
 }
 
-type Provider = { name: string; run: (b64: string, mime: string) => Promise<unknown> };
+type Provider = { name: string; run: (b64: string, mime: string, signal: AbortSignal) => Promise<unknown> };
 
 function providers(): Provider[] {
   const list: Provider[] = [];
   if (process.env.GEMINI_API_KEY) {
     const models = (process.env.GEMINI_MODELS || DEFAULT_GEMINI_MODELS).split(",").map((m) => m.trim()).filter(Boolean);
-    for (const m of models) list.push({ name: m, run: (b, t) => gemini(m, b, t) });
+    for (const m of models) list.push({ name: m, run: (b, t, sig) => gemini(m, b, t, sig) });
   }
   if (process.env.GROQ_API_KEY) {
     const m = process.env.GROQ_MODEL || DEFAULT_GROQ_MODEL;
-    list.push({ name: `groq:${m}`, run: (b, t) => groq(m, b, t) });
+    list.push({ name: `groq:${m}`, run: (b, t, sig) => groq(m, b, t, sig) });
   }
   return list;
 }
@@ -218,17 +229,36 @@ export async function extractCard(image: Buffer, mime: string): Promise<ExtractR
   const b64 = image.toString("base64");
   const errors: string[] = [];
   let soonestRetry = Infinity;
+  let busy = false;
+  const deadline = Date.now() + TOTAL_BUDGET_MS;
 
-  for (const p of chain) {
-    if (coolingDown(p.name)) {
-      soonestRetry = Math.min(soonestRetry, cooldownUntil.get(p.name)! - Date.now());
-      continue;
-    }
+  // If every model is cooling down, still try the one whose cooldown ends first rather than failing instantly.
+  const available = chain.filter((p) => !coolingDown(p.name));
+  const queue = available.length ? available : [...chain].sort((a, b) => (cooldownUntil.get(a.name) ?? 0) - (cooldownUntil.get(b.name) ?? 0)).slice(0, 1);
+  for (const p of chain) if (!queue.includes(p)) soonestRetry = Math.min(soonestRetry, cooldownUntil.get(p.name)! - Date.now());
+
+  for (const p of queue) {
     for (let attempt = 0; attempt < 3; attempt++) {
+      const remaining = deadline - Date.now();
+      if (remaining < 4000) {
+        errors.push(`${p.name}: skipped (out of time)`);
+        busy = true;
+        break;
+      }
+      const timeout = Math.min(CALL_TIMEOUT_MS, remaining - 1000);
       try {
-        const raw = await p.run(b64, mime);
+        const raw = await p.run(b64, mime, AbortSignal.timeout(timeout));
+        cooldownUntil.delete(p.name);
         return { contacts: toContacts(raw), provider: p.name, raw };
       } catch (e) {
+        if (e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError" || e instanceof BusyError)) {
+          const why = e instanceof BusyError ? e.message.slice(0, 160) : `no answer within ${Math.round(timeout / 1000)}s`;
+          console.warn(`extract: ${p.name} busy/slow, trying next model:`, why);
+          cooldownUntil.set(p.name, Date.now() + BUSY_COOLDOWN_MS);
+          errors.push(`${p.name}: busy (${why})`);
+          busy = true;
+          break;
+        }
         if (e instanceof QuotaError) {
           if (!e.daily && e.retryAfterMs <= MAX_INLINE_WAIT_MS && attempt < 2) {
             await sleep(e.retryAfterMs + 250);
@@ -249,6 +279,7 @@ export async function extractCard(image: Buffer, mime: string): Promise<ExtractR
     }
   }
   const msg = errors.length ? errors.join(" | ") : "All models are cooling down after hitting their free quota";
+  if (busy) throw new Error(`AI busy: ${msg}`);
   if (soonestRetry !== Infinity) throw new Error(`429 quota: ${msg} (retry in ~${Math.ceil(soonestRetry / 60000)} min)`);
   throw new Error(msg);
 }

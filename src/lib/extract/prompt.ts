@@ -23,7 +23,19 @@ Use "" or [] for anything not present.`;
 const S = { type: "string" };
 const A = { type: "array", items: { type: "string" } };
 
-/** Standard JSON Schema for the model's structured output. */
+const CONTACT_PROPERTIES = {
+  fullName: S, prefix: S, firstName: S, middleName: S, lastName: S, suffix: S,
+  jobTitle: S, department: S, company: S, tagline: S,
+  emails: A, mobilePhones: A, officePhones: A, faxNumbers: A, otherPhones: A,
+  website: S, fullAddress: S, streetAddress: S, city: S, state: S, postalCode: S, country: S,
+  linkedin: S, twitter: S, instagram: S, facebook: S, whatsapp: S, wechat: S, otherSocials: A,
+  otherInfo: S, language: S,
+};
+
+/**
+ * Standard JSON Schema for the model's structured output.
+ * Every field is required: with optional fields, structured-output models fill only a random few.
+ */
 export const CONTACTS_JSON_SCHEMA = {
   type: "object",
   properties: {
@@ -31,16 +43,12 @@ export const CONTACTS_JSON_SCHEMA = {
       type: "array",
       items: {
         type: "object",
-        properties: {
-          fullName: S, prefix: S, firstName: S, middleName: S, lastName: S, suffix: S,
-          jobTitle: S, department: S, company: S, tagline: S,
-          emails: A, mobilePhones: A, officePhones: A, faxNumbers: A, otherPhones: A,
-          website: S, fullAddress: S, streetAddress: S, city: S, state: S, postalCode: S, country: S,
-          linkedin: S, twitter: S, instagram: S, facebook: S, whatsapp: S, wechat: S, otherSocials: A,
-          otherInfo: S, language: S,
-        },
+        properties: CONTACT_PROPERTIES,
+        required: Object.keys(CONTACT_PROPERTIES),
+        additionalProperties: false,
       },
     },
   },
   required: ["contacts"],
+  additionalProperties: false,
 };

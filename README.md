@@ -1,6 +1,6 @@
 # SIL Card Manager
 
-Upload photos of business cards in batches. A free vision model (Google Gemini 3.8 Flash, falling back to Gemini 3.5 Flash-Lite and then Groq Qwen 3.8) pulls every detail off each card into a table. From there you can copy it into Google Sheets in one click, or download Excel or CSV. Cards are organised into **events** that teammates can collaborate on, and every row records who added it.
+Upload photos of business cards in batches. A free vision model (Google Gemini 3.5 Flash-Lite, falling back to Gemini 3.8 Flash and then Groq Qwen 3.8) pulls every detail off each card into a table. From there you can copy it into Google Sheets in one click, or download Excel or CSV. Cards are organised into **events** that teammates can collaborate on, and every row records who added it.
 
 ## Features
 
@@ -56,7 +56,7 @@ npm run db:migrate
 ### 4. Vision model (free)
 
 - `GEMINI_API_KEY`: get a free key at <https://aistudio.google.com/apikey>.
-- `GEMINI_MODELS`: the models to try, in order. The default is `gemini-3.8-flash,gemini-3.5-flash-lite`. When a model hits its free quota, the app moves on to the next one and comes back after the quota resets.
+- `GEMINI_MODELS`: the models to try, in order. The default is `gemini-3.5-flash-lite,gemini-3.8-flash`. Flash-Lite is fast and has the largest free quota. When a model hits its free quota, is overloaded, or takes longer than 22 seconds, the app moves on to the next one. Each card gets at most 50 seconds in total, which keeps it within the hosting time limit.
 - Optional `GROQ_API_KEY`: a free key from <https://console.groq.com/keys>. It's the last resort, using `qwen/qwen3.8-27b`.
 - Optional `DEFAULT_PHONE_COUNTRY` (e.g. `IN`): used to format phone numbers printed without a country code.
 
@@ -88,7 +88,7 @@ Each card is processed in its own short request, so this fits within Vercel's fr
 3. **Contacts** → review and fix any field, then click **Copy for Google Sheets**, click cell A1 in your sheet and paste. You can also use **Download → Excel**.
 4. **Members** → add teammates' Google emails. Each person's uploads show their name in **Added By**.
 
-Free-tier throughput: Google no longer publishes fixed free limits. You can see your project's limits in AI Studio. Recent reports put Gemini 3.8 Flash at about 5 requests/minute and 20/day, and 3.5 Flash-Lite at about 10–15/minute and 500/day. The app processes two cards at a time and uses the best model that still has quota. If every model's quota is used up, the card is marked failed with a "retry in N min" message.
+Free-tier throughput: Google no longer publishes fixed free limits. You can see your project's limits in AI Studio. Recent reports put Gemini 3.8 Flash at about 5 requests/minute and 20/day, and 3.5 Flash-Lite at about 10–15/minute and 500/day. The app processes two cards at a time and uses the first model that still has quota and is responding. If every model's quota is used up, the card is marked failed with a "retry in N min" message.
 
 ## Project layout
 
