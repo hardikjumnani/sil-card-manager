@@ -29,7 +29,12 @@ export const POST = handle(async (req: Request, { params }: Ctx) => {
 
   const imageId = randomUUID();
   const key = `${batch.event_id}/${batchId}/${imageId}.${ext}`;
-  await putObject(key, Buffer.from(await file.arrayBuffer()), file.type);
+  try {
+    await putObject(key, Buffer.from(await file.arrayBuffer()), file.type);
+  } catch (e) {
+    console.error("storage put failed", e);
+    throw new HttpError(502, e instanceof Error && /storage/i.test(e.message) ? e.message : "Couldn't save the image. Please retry.");
+  }
   const originalName = String(form.get("name") || file.name || "card").slice(0, 255);
   await sql`
     insert into card_images (id, batch_id, event_id, uploaded_by, storage_key, original_name, mime_type, size_bytes)

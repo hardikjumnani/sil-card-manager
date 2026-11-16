@@ -30,6 +30,8 @@ export async function putObject(key: string, data: Buffer, contentType: string) 
     if (error) throw new Error(`Storage upload failed: ${error.message}`);
     return;
   }
+  if (process.env.VERCEL)
+    throw new Error("Image storage isn't configured. Set SUPABASE_URL and SUPABASE_SECRET_KEY in Vercel, then redeploy.");
   const p = localPath(key);
   await mkdir(path.dirname(p), { recursive: true });
   await writeFile(p, data);
