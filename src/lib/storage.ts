@@ -7,13 +7,30 @@ let client: SupabaseClient | null = null;
 
 /** Server-only Supabase client using the new secret API key (sb_secret_...). Never expose it to the browser. */
 function supabase() {
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SECRET_KEY;
+  const url = projectUrl(process.env.SUPABASE_URL);
+  const key = process.env.SUPABASE_SECRET_KEY?.trim();
   if (!url || !key) return null;
   client ??= createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
   return client;
+}
+
+/**
+ * Accepts the URL in any common copy-paste form and returns the bare project origin:
+ * "https://ref.supabase.co/rest/v1/" -> "https://ref.supabase.co",
+ * "https://supabase.com/dashboard/project/ref/..." -> "https://ref.supabase.co".
+ */
+function projectUrl(raw?: string) {
+  const s = raw?.trim().replace(/^["']|["']$/g, "");
+  if (!s) return undefined;
+  try {
+    const u = new URL(s);
+    const dash = u.hostname.endsWith("supabase.com") && u.pathname.match(/\/project\/([a-z0-9]+)/);
+    return dash ? `https://${dash[1]}.supabase.co` : u.origin;
+  } catch {
+    return s;
+  }
 }
 
 const localRoot = path.join(process.cwd(), "uploads");
