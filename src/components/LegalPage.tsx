@@ -5,7 +5,7 @@ export function LegalPage({ title, children }: { title: string; children: React.
   return (
     <main className="mx-auto max-w-2xl px-4 py-12 text-slate-700 sm:px-6">
       <Link href="/login" className="mb-8 flex items-center gap-2 font-semibold text-indigo-700">
-        <ContactRound size={20} /> SIL Card Manager
+        <ContactRound size={20} /> Scaler Business Cards Manager
       </Link>
       <h1 className="text-3xl font-bold text-slate-900">{title}</h1>
       <p className="mt-1 text-sm text-slate-500">Last updated: 16 November 2026</p>

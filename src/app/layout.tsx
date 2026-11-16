@@ -6,7 +6,7 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"], display: "swap" });
 
 export const metadata: Metadata = {
-  title: "SIL Card Manager",
+  title: "Scaler Business Cards Manager",
   description: "Scan business cards in batches, extract every detail with AI, and share them with your team.",
 };
 

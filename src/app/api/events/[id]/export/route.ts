@@ -49,7 +49,7 @@ export const GET = handle(async (req: Request, { params }: Ctx) => {
   }
 
   const wb = new ExcelJS.Workbook();
-  wb.creator = "Business Card Manager";
+  wb.creator = "Scaler Business Cards Manager";
   const ws = wb.addWorksheet("Cards", { views: [{ state: "frozen", ySplit: 1 }] });
   ws.columns = [...CONTACT_FIELDS, ...META_COLUMNS].map((c) => ({ header: c.label, key: c.key, width: c.width }));
   rows.forEach((r) => ws.addRow(r));

@@ -13,7 +13,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
       <section className="flex flex-1 flex-col justify-center bg-gradient-to-br from-indigo-600 via-indigo-700 to-violet-800 px-6 py-12 text-white sm:px-12">
         <div className="mx-auto max-w-md">
           <div className="mb-8 flex items-center gap-2 text-lg font-semibold">
-            <ContactRound /> SIL Card Manager
+            <ContactRound /> Scaler Business Cards Manager
           </div>
           <h1 className="text-3xl font-bold leading-tight sm:text-4xl">Turn stacks of business cards into a clean spreadsheet.</h1>
           <ul className="mt-8 space-y-4 text-indigo-100">

@@ -17,7 +17,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-white">
               <ContactRound size={18} />
             </span>
-            <span className="hidden sm:inline">SIL Card Manager</span>
+            <span className="hidden sm:inline">Scaler Business Cards Manager</span>
           </Link>
           <div className="flex items-center gap-3">
             <div className="hidden text-right text-sm leading-tight sm:block">

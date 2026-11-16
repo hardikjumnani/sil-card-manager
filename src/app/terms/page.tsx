@@ -1,11 +1,11 @@
 import { LegalPage } from "@/components/LegalPage";
 
-export const metadata = { title: "Terms of Service · SIL Card Manager" };
+export const metadata = { title: "Terms of Service · Scaler Business Cards Manager" };
 
 export default function TermsPage() {
   return (
     <LegalPage title="Terms of Service">
-      <p>By signing in to SIL Card Manager you agree to these terms.</p>
+      <p>By signing in to Scaler Business Cards Manager you agree to these terms.</p>
       <section>
         <h2>Use of the service</h2>
         <ul>

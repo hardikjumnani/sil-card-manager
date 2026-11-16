@@ -1,12 +1,12 @@
 import { LegalPage } from "@/components/LegalPage";
 
-export const metadata = { title: "Privacy Policy · SIL Card Manager" };
+export const metadata = { title: "Privacy Policy · Scaler Business Cards Manager" };
 
 export default function PrivacyPage() {
   return (
     <LegalPage title="Privacy Policy">
       <p>
-        SIL Card Manager lets you upload photos of business cards, turns them into contact details and organises
+        Scaler Business Cards Manager lets you upload photos of business cards, turns them into contact details and organises
         them into events that you can share with your team.
       </p>
       <section>

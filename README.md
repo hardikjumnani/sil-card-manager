@@ -1,4 +1,4 @@
-# SIL Card Manager
+# Scaler Business Cards Manager
 
 Upload photos of business cards in batches. A free vision model (Google Gemini 3.5 Flash-Lite, falling back to Gemini 3.8 Flash and then Groq Qwen 3.8) pulls every detail off each card into a table. From there you can copy it into Google Sheets in one click, or download Excel or CSV. Cards are organised into **events** that teammates can collaborate on, and every row records who added it.
 
