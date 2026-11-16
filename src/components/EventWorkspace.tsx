@@ -13,13 +13,20 @@ import { Uploader } from "./Uploader";
 import { ContactsTable } from "./ContactsTable";
 import { MembersPanel } from "./MembersPanel";
 
-type Tab = "contacts" | "upload" | "members";
+type Tab = "cards" | "upload" | "members";
 
-export function EventWorkspace({ event, currentUserId }: { event: EventSummary; currentUserId: string }) {
+export function EventWorkspace({
+  event,
+  currentUser,
+}: {
+  event: EventSummary;
+  currentUser: { id: string; name: string; email: string };
+}) {
+  const currentUserId = currentUser.id;
   const router = useRouter();
   const canEdit = event.role !== "VIEWER";
   const isOwner = event.role === "OWNER";
-  const [tab, setTab] = useState<Tab>(event.contactCount === 0 && canEdit ? "upload" : "contacts");
+  const [tab, setTab] = useState<Tab>(event.contactCount === 0 && canEdit ? "upload" : "cards");
   const [contacts, setContacts] = useState<ContactRow[] | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -46,8 +53,8 @@ export function EventWorkspace({ event, currentUserId }: { event: EventSummary; 
   }, [uploadBusy]);
 
   const tabs: { key: Tab; label: string; icon: typeof Table2; count?: number; show: boolean }[] = [
-    { key: "contacts", label: "Contacts", icon: Table2, count: contacts?.length, show: true },
     { key: "upload", label: "Upload cards", icon: Upload, show: canEdit },
+    { key: "cards", label: "Cards", icon: Table2, count: contacts?.length, show: true },
     { key: "members", label: "Members", icon: Users, count: event.memberCount, show: !event.isPersonal },
   ];
 
@@ -111,7 +118,7 @@ export function EventWorkspace({ event, currentUserId }: { event: EventSummary; 
 
       <div className="pt-5">
         {/* Tabs stay mounted so uploads keep running while you look at the table. */}
-        <div className={clsx(tab !== "contacts" && "hidden")}>
+        <div className={clsx(tab !== "cards" && "hidden")}>
           <ContactsTable
             eventId={event.id}
             eventName={event.name}
@@ -119,13 +126,15 @@ export function EventWorkspace({ event, currentUserId }: { event: EventSummary; 
             setContacts={setContacts}
             canEdit={canEdit}
             isOwner={isOwner}
+            isPersonal={event.isPersonal}
             currentUserId={currentUserId}
-            onUploadClick={canEdit ? () => setTab("upload") : undefined}
+            currentUserName={currentUser.name}
+            currentUserEmail={currentUser.email}
           />
         </div>
         {canEdit && (
           <div className={clsx(tab !== "upload" && "hidden")}>
-            <Uploader eventId={event.id} onContactsChanged={loadContacts} onBusyChange={setUploadBusy} onViewContacts={() => setTab("contacts")} />
+            <Uploader eventId={event.id} onContactsChanged={loadContacts} onBusyChange={setUploadBusy} onViewContacts={() => setTab("cards")} />
           </div>
         )}
         {!event.isPersonal && tab === "members" && (
@@ -161,7 +170,7 @@ function DeleteEventModal({ open, onClose, event }: { open: boolean; onClose: ()
   return (
     <Modal open={open} onClose={onClose} title="Delete event">
       <p className="text-sm text-slate-600">
-        This permanently deletes <strong>{event.name}</strong>, all {event.contactCount} contacts and every uploaded card image, for all members.
+        This permanently deletes <strong>{event.name}</strong>, all {event.contactCount} cards and every uploaded card image, for all members.
       </p>
       <label className="mt-4 block text-sm text-slate-700">
         Type <strong>{event.name}</strong> to confirm

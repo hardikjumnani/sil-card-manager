@@ -25,7 +25,6 @@ import {
   ImageIcon,
   Search,
   Trash2,
-  Upload,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { CONTACT_FIELDS, META_COLUMNS, metaValue, type ContactData, type ContactRow, type FieldKey, type MetaKey } from "@/lib/fields";
@@ -34,12 +33,23 @@ import { api, Badge, Button, inputCls, Modal, toast } from "./ui";
 const LABELS: Record<string, string> = Object.fromEntries([...CONTACT_FIELDS, ...META_COLUMNS].map((c) => [c.key, c.label]));
 const DEFAULT_VISIBILITY: VisibilityState = {
   ...Object.fromEntries(CONTACT_FIELDS.map((f) => [f.key, f.default])),
-  addedBy: true,
   addedAt: true,
   duplicate: false,
 };
 const STORAGE_KEY = "contacts-columns-v1";
 const META_KEYS = new Set<string>(META_COLUMNS.map((m) => m.key));
+/** "Added By" is only exported (copy / download). On the website the person tabs show who added what. */
+const SITE_META_COLUMNS = META_COLUMNS.filter((m) => m.key !== "addedBy");
+
+type Person = { id: string; name: string; email: string; count: number };
+
+/** Tab labels: first name, or the full name/email when two people share a first name. */
+export function personLabels(people: Person[]) {
+  const first = (p: Person) => p.name.trim().split(/\s+/)[0] || p.email.split("@")[0];
+  const counts = new Map<string, number>();
+  for (const p of people) counts.set(first(p).toLowerCase(), (counts.get(first(p).toLowerCase()) ?? 0) + 1);
+  return new Map(people.map((p) => [p.id, (counts.get(first(p).toLowerCase())! > 1 ? p.name.trim() || p.email : first(p)) + "'s cards"]));
+}
 
 function loadVisibility(): VisibilityState {
   try {
@@ -71,8 +81,10 @@ export function ContactsTable({
   setContacts,
   canEdit,
   isOwner,
+  isPersonal,
   currentUserId,
-  onUploadClick,
+  currentUserName,
+  currentUserEmail,
 }: {
   eventId: string;
   eventName: string;
@@ -80,9 +92,13 @@ export function ContactsTable({
   setContacts: Dispatch<SetStateAction<ContactRow[] | null>>;
   canEdit: boolean;
   isOwner: boolean;
+  isPersonal: boolean;
   currentUserId: string;
-  onUploadClick?: () => void;
+  currentUserName: string;
+  currentUserEmail: string;
 }) {
+  // Whose cards are shown: "all" or a user id. Everyone starts on their own cards.
+  const [person, setPerson] = useState<string>(isPersonal ? "all" : currentUserId);
   const [sorting, setSorting] = useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = useState("");
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
@@ -97,6 +113,29 @@ export function ContactsTable({
       localStorage.setItem(STORAGE_KEY, JSON.stringify(columnVisibility));
     } catch {}
   }, [columnVisibility]);
+
+  const people = useMemo(() => {
+    const byId = new Map<string, Person>();
+    byId.set(currentUserId, { id: currentUserId, name: currentUserName, email: currentUserEmail, count: 0 });
+    for (const c of contacts ?? []) {
+      const p = byId.get(c.addedById) ?? { id: c.addedById, name: c.addedByName, email: c.addedByEmail, count: 0 };
+      p.count++;
+      byId.set(c.addedById, p);
+    }
+    const [me, ...others] = [...byId.values()];
+    others.sort((a, b) => (a.name || a.email).localeCompare(b.name || b.email));
+    return [me, ...others];
+  }, [contacts, currentUserId, currentUserName, currentUserEmail]);
+  const labels = useMemo(() => personLabels(people), [people]);
+  const visibleContacts = useMemo(
+    () => (person === "all" ? (contacts ?? []) : (contacts ?? []).filter((c) => c.addedById === person)),
+    [contacts, person],
+  );
+  const choosePerson = (id: string) => {
+    setPerson(id);
+    setRowSelection({});
+    setPreviewId(null);
+  };
 
   const contactsRef = useRef(contacts);
   contactsRef.current = contacts;
@@ -159,7 +198,7 @@ export function ContactsTable({
           <EditableCell value={getValue() as string} editable={canEdit} wide={f.width >= 28} onSave={(v) => saveField(row.original.id, f.key, v)} />
         ),
       })),
-      ...META_COLUMNS.map<ColumnDef<ContactRow>>((m) => ({
+      ...SITE_META_COLUMNS.map<ColumnDef<ContactRow>>((m) => ({
         id: m.key,
         accessorFn: (r) => (m.key === "addedAt" ? r.createdAt : metaValue(r, m.key)),
         header: m.label,
@@ -172,7 +211,7 @@ export function ContactsTable({
   );
 
   const table = useReactTable({
-    data: contacts ?? [],
+    data: visibleContacts,
     columns,
     state: { sorting, globalFilter, rowSelection, columnVisibility },
     getRowId: (r) => r.id,
@@ -195,9 +234,13 @@ export function ContactsTable({
     const source = selected.length ? selected : rows;
     if (!source.length) return toast("Nothing to copy", "info");
     const clean = (v: unknown) => String(v ?? "").replace(/[\t\r\n]+/g, " ").trim();
-    const header = dataColumns.map((c) => LABELS[c.id]);
+    // Spreadsheets always get "Added By" (hidden on the website), placed before the other meta columns.
+    const ids = dataColumns.map((c) => c.id);
+    const firstMeta = ids.findIndex((id) => META_KEYS.has(id));
+    ids.splice(firstMeta < 0 ? ids.length : firstMeta, 0, "addedBy");
+    const header = ids.map((id) => LABELS[id]);
     const lines = source.map((r) =>
-      dataColumns.map((c) => clean(META_KEYS.has(c.id) ? metaValue(r.original, c.id as MetaKey) : r.original.data[c.id as FieldKey])),
+      ids.map((id) => clean(META_KEYS.has(id) ? metaValue(r.original, id as MetaKey) : r.original.data[id as FieldKey])),
     );
     await copyText([header, ...lines].map((l) => l.join("\t")).join("\n"));
     toast(`Copied ${source.length} row${source.length === 1 ? "" : "s"}. Paste into cell A1 of your Google Sheet.`);
@@ -205,15 +248,15 @@ export function ContactsTable({
 
   const deleteSelected = async () => {
     const allowed = selected.filter((r) => isOwner || r.original.addedById === currentUserId);
-    if (!allowed.length) return toast("You can only delete contacts you added", "error");
+    if (!allowed.length) return toast("You can only delete cards you added", "error");
     const skipped = selected.length - allowed.length;
-    if (!confirm(`Delete ${allowed.length} contact${allowed.length > 1 ? "s" : ""}?${skipped ? ` (${skipped} added by others will be kept)` : ""}`)) return;
+    if (!confirm(`Delete ${allowed.length} card${allowed.length > 1 ? "s" : ""}?${skipped ? ` (${skipped} added by others will be kept)` : ""}`)) return;
     const ids = allowed.map((r) => r.original.id);
     const failed: string[] = [];
     for (const id of ids) await api(`/api/contacts/${id}`, { method: "DELETE" }).catch(() => failed.push(id));
     setContacts((cs) => cs?.filter((c) => !ids.includes(c.id) || failed.includes(c.id)) ?? cs);
     setRowSelection({});
-    toast(failed.length ? `${failed.length} could not be deleted` : `Deleted ${ids.length - failed.length} contacts`, failed.length ? "error" : "success");
+    toast(failed.length ? `${failed.length} could not be deleted` : `Deleted ${ids.length - failed.length} card${ids.length - failed.length === 1 ? "" : "s"}`, failed.length ? "error" : "success");
   };
 
   if (contacts === null) {
@@ -230,13 +273,10 @@ export function ContactsTable({
     return (
       <div className="flex flex-col items-center rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
         <FileSpreadsheet className="text-slate-300" size={44} />
-        <h3 className="mt-3 font-semibold text-slate-800">No contacts yet</h3>
-        <p className="mt-1 max-w-sm text-sm text-slate-500">Upload photos of business cards and the AI will fill this sheet with every detail it finds.</p>
-        {onUploadClick && (
-          <Button variant="primary" className="mt-5" onClick={onUploadClick}>
-            <Upload size={16} /> Upload cards
-          </Button>
-        )}
+        <h3 className="mt-3 font-semibold text-slate-800">No cards yet</h3>
+        <p className="mt-1 max-w-sm text-sm text-slate-500">
+          {canEdit ? "Use the Upload cards tab to add photos. " : ""}The AI fills this sheet with every detail it finds on each card.
+        </p>
       </div>
     );
   }
@@ -244,13 +284,36 @@ export function ContactsTable({
   const previewIndex = previewId ? rows.findIndex((r) => r.original.id === previewId) : -1;
   const previewRow = previewId ? contacts.find((c) => c.id === previewId) : undefined;
 
+  const exportQuery = person === "all" ? "" : `&addedBy=${person}`;
+  const scopeLabel = person === "all" ? "all cards" : labels.get(person);
+
   return (
     <div>
+      {!isPersonal && (
+        <div className="scroll-thin -mx-1 mb-3 flex gap-1.5 overflow-x-auto px-1 pb-1" role="tablist" aria-label="Whose cards">
+          {[{ id: "all", label: "All cards", count: contacts.length }, ...people.map((p) => ({ id: p.id, label: labels.get(p.id)!, count: p.count }))].map((t) => (
+            <button
+              key={t.id}
+              role="tab"
+              aria-selected={person === t.id}
+              onClick={() => choosePerson(t.id)}
+              className={clsx(
+                "flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors",
+                person === t.id ? "border-indigo-600 bg-indigo-600 text-white" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900",
+              )}
+            >
+              {t.label}
+              {t.id === currentUserId && <span className={clsx("text-xs", person === t.id ? "text-indigo-200" : "text-slate-400")}>(you)</span>}
+              <span className={clsx("rounded-full px-1.5 text-xs", person === t.id ? "bg-white/20" : "bg-slate-100 text-slate-500")}>{t.count}</span>
+            </button>
+          ))}
+        </div>
+      )}
       {/* Toolbar */}
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <div className="relative min-w-[200px] flex-1 sm:max-w-xs">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input className={clsx(inputCls, "pl-9")} placeholder="Search contacts…" value={globalFilter} onChange={(e) => setGlobalFilter(e.target.value)} />
+          <input className={clsx(inputCls, "pl-9")} placeholder="Search cards…" value={globalFilter} onChange={(e) => setGlobalFilter(e.target.value)} />
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
           {selected.length > 0 && (
@@ -290,13 +353,13 @@ export function ContactsTable({
             </Button>
             {dlOpen && (
               <Popover onClose={() => setDlOpen(false)}>
-                <a className="block rounded px-2 py-1.5 text-sm hover:bg-slate-50" href={`/api/events/${eventId}/export?format=xlsx`} onClick={() => setDlOpen(false)}>
+                <a className="block rounded px-2 py-1.5 text-sm hover:bg-slate-50" href={`/api/events/${eventId}/export?format=xlsx${exportQuery}`} onClick={() => setDlOpen(false)}>
                   Excel (.xlsx)
                 </a>
-                <a className="block rounded px-2 py-1.5 text-sm hover:bg-slate-50" href={`/api/events/${eventId}/export?format=csv`} onClick={() => setDlOpen(false)}>
+                <a className="block rounded px-2 py-1.5 text-sm hover:bg-slate-50" href={`/api/events/${eventId}/export?format=csv${exportQuery}`} onClick={() => setDlOpen(false)}>
                   CSV
                 </a>
-                <p className="mt-1 border-t border-slate-100 px-2 pt-1.5 text-[11px] text-slate-400">All columns, all contacts in “{eventName}”</p>
+                <p className="mt-1 border-t border-slate-100 px-2 pt-1.5 text-[11px] text-slate-400">All columns incl. Added By · {scopeLabel} in “{eventName}”</p>
               </Popover>
             )}
           </div>
@@ -340,11 +403,15 @@ export function ContactsTable({
             ))}
           </tbody>
         </table>
-        {rows.length === 0 && <p className="px-4 py-8 text-center text-sm text-slate-500">No contacts match “{globalFilter}”.</p>}
+        {rows.length === 0 && (
+          <p className="px-4 py-8 text-center text-sm text-slate-500">
+            {globalFilter ? <>No cards match “{globalFilter}”.</> : person === currentUserId ? "You haven't added any cards yet." : "No cards here yet."}
+          </p>
+        )}
       </div>
       <p className="mt-2 text-xs text-slate-400">
-        {rows.length} of {contacts.length} contacts.{canEdit && " Click any cell to edit."} Copy pastes the visible columns
-        {selected.length ? " of the selected rows" : ""}; it lines up as columns in Google Sheets.
+        {rows.length} of {visibleContacts.length} cards.{canEdit && " Click any cell to edit."} Copy pastes the visible columns plus Added By
+        {selected.length ? " for the selected rows" : ""}; it lines up as columns in Google Sheets.
       </p>
 
       {previewRow && (
@@ -463,7 +530,7 @@ function ReviewModal({
   };
 
   return (
-    <Modal open onClose={onClose} title={row.data.fullName || row.data.company || "Contact"} wide>
+    <Modal open onClose={onClose} title={row.data.fullName || row.data.company || "Card"} wide>
       <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
         <div className="md:sticky md:top-16 md:self-start">
           {row.cardImageId ? (
@@ -475,8 +542,7 @@ function ReviewModal({
             <div className="flex aspect-[16/10] items-center justify-center rounded-xl bg-slate-100 text-sm text-slate-400">Image not available</div>
           )}
           <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-            <span>Added by <strong className="text-slate-700">{row.addedByName || row.addedByEmail}</strong></span>
-            <span>· {new Date(row.createdAt).toLocaleString()}</span>
+            <span>Added {new Date(row.createdAt).toLocaleString()}</span>
             {row.isDuplicate && <Badge tone="amber">Possible duplicate</Badge>}
           </div>
           <div className="mt-3 flex gap-2">

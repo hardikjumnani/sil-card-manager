@@ -128,7 +128,7 @@ export function MembersPanel({ event, currentUserId, onChanged }: { event: Event
                       variant="ghost"
                       className="text-red-600"
                       onClick={async () => {
-                        if (!confirm(`Leave "${event.name}"? You'll lose access to its contacts.`)) return;
+                        if (!confirm(`Leave "${event.name}"? You'll lose access to its cards.`)) return;
                         try {
                           await api(`/api/events/${event.id}/members/${m.id}`, { method: "DELETE" });
                           router.push("/events");

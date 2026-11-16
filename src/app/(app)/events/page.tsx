@@ -17,7 +17,7 @@ export default async function EventsPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Your events</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Each event has its own contact sheet. Invite teammates to scan cards into the same sheet.
+            Each event has its own card sheet. Invite teammates to scan cards into the same sheet.
           </p>
         </div>
         <CreateEventButton />
@@ -46,7 +46,7 @@ export default async function EventsPage() {
                 </span>
               )}
               <span>
-                <strong className="text-slate-800">{e.contactCount}</strong> contact{e.contactCount === 1 ? "" : "s"}
+                <strong className="text-slate-800">{e.contactCount}</strong> card{e.contactCount === 1 ? "" : "s"}
               </span>
             </div>
             <div className="mt-auto flex items-center justify-between pt-4">

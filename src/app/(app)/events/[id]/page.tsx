@@ -12,5 +12,6 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
   const session = await auth();
   const event = await getEventForUser(session!.user.id, id);
   if (!event) notFound();
-  return <EventWorkspace event={event} currentUserId={session!.user.id} />;
+  const u = session!.user;
+  return <EventWorkspace event={event} currentUser={{ id: u.id, name: u.name ?? "", email: u.email ?? "" }} />;
 }

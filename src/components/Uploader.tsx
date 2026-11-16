@@ -326,7 +326,7 @@ export function Uploader({
     const found = targets.reduce((s, t) => s + (t.found ?? 0), 0);
     const failed = targets.filter((t) => t.extract === "failed").length;
     toast(
-      failed ? `Extracted ${found} contacts. ${failed} card${failed > 1 ? "s" : ""} failed; you can retry.` : `Extracted ${found} contacts from ${targets.length} cards`,
+      failed ? `Read ${found} card${found === 1 ? "" : "s"}. ${failed} photo${failed > 1 ? "s" : ""} failed; you can retry.` : `Read ${found} card${found === 1 ? "" : "s"} from ${targets.length} photo${targets.length === 1 ? "" : "s"}`,
       failed ? "error" : "success",
     );
   };
@@ -424,10 +424,10 @@ export function Uploader({
                   <div className="mb-1.5 mt-4 flex items-center justify-between text-sm">
                     <span className="flex items-center gap-1.5 font-medium text-slate-800">
                       <Sparkles size={14} className="text-indigo-600" />
-                      {extracting ? "Extracting contact details…" : "Extraction finished"}
+                      {extracting ? "Reading cards…" : "Reading finished"}
                     </span>
                     <span className="tabular-nums text-slate-500">
-                      {extractedDone}/{runItems.length} cards · {foundTotal} contacts
+                      {extractedDone}/{runItems.length} photos · {foundTotal} cards
                     </span>
                   </div>
                   <ProgressBar value={(extractedDone / runItems.length) * 100} tone={extracting ? "indigo" : "green"} />
@@ -439,7 +439,7 @@ export function Uploader({
                 <div className="flex gap-2">
                   <Button onClick={reset}>New batch</Button>
                   <Button variant="primary" onClick={onViewContacts}>
-                    <Table2 size={16} /> View contacts
+                    <Table2 size={16} /> View cards
                   </Button>
                 </div>
               ) : (
@@ -513,7 +513,7 @@ export function Uploader({
                   <th className="px-4 py-2 font-medium">Uploaded</th>
                   <th className="px-4 py-2 font-medium">By</th>
                   <th className="px-4 py-2 text-right font-medium">Cards</th>
-                  <th className="px-4 py-2 text-right font-medium">Contacts</th>
+                  <th className="px-4 py-2 text-right font-medium">Cards</th>
                   <th className="px-4 py-2 font-medium">Status</th>
                 </tr>
               </thead>
@@ -566,7 +566,7 @@ function ItemStatus({ it, onRetry }: { it: Item; onRetry: () => void }) {
     return (
       <div className={clsx(cls, it.found ? "text-emerald-600" : "text-amber-600")}>
         {it.found ? <CheckCircle2 size={12} /> : <AlertCircle size={12} />}
-        {it.found ? `${it.found} contact${it.found > 1 ? "s" : ""} found` : "No card detected"}
+        {it.found ? `${it.found} card${it.found > 1 ? "s" : ""} found` : "No card detected"}
       </div>
     );
   if (it.extract === "failed")

@@ -1,21 +1,30 @@
 import ExcelJS from "exceljs";
 import { sql } from "@/lib/db";
-import { handle, requireEventRole } from "@/lib/access";
+import { handle, HttpError, isUuid, requireEventRole } from "@/lib/access";
 import { listContacts } from "@/lib/contacts";
 import { CONTACT_FIELDS, META_COLUMNS } from "@/lib/fields";
 
 export const runtime = "nodejs";
 type Ctx = { params: Promise<{ id: string }> };
 
-/** GET ?format=xlsx|csv  — exports every contact in the event, including "Added By". */
+/** GET ?format=xlsx|csv[&addedBy=<userId>] — exports the event's cards (optionally one person's), including "Added By". */
 export const GET = handle(async (req: Request, { params }: Ctx) => {
   const { id } = await params;
   await requireEventRole(id);
-  const format = new URL(req.url).searchParams.get("format") === "csv" ? "csv" : "xlsx";
+  const q = new URL(req.url).searchParams;
+  const format = q.get("format") === "csv" ? "csv" : "xlsx";
+  const addedBy = q.get("addedBy");
+  if (addedBy && !isUuid(addedBy)) throw new HttpError(400, "Invalid person");
   const [ev] = await sql<{ name: string }[]>`select name from events where id = ${id}`;
-  const contacts = await listContacts(id);
+  const contacts = (await listContacts(id)).filter((c) => !addedBy || c.addedById === addedBy);
   const stamp = new Date().toISOString().slice(0, 10);
-  const base = `${ev.name.replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "_") || "contacts"}_${stamp}`;
+  const safe = (s: string) => s.replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "_");
+  let who = "";
+  if (addedBy) {
+    const [u] = await sql<{ name: string | null; email: string }[]>`select name, email from users where id = ${addedBy}`;
+    who = u ? "_" + safe(u.name?.split(/\s+/)[0] || u.email.split("@")[0]) : "";
+  }
+  const base = `${safe(ev.name) || "cards"}${who}_${stamp}`;
 
   const header = [...CONTACT_FIELDS.map((f) => f.label), ...META_COLUMNS.map((m) => m.label)];
   const rows = contacts.map((c) => [
@@ -41,7 +50,7 @@ export const GET = handle(async (req: Request, { params }: Ctx) => {
 
   const wb = new ExcelJS.Workbook();
   wb.creator = "Business Card Manager";
-  const ws = wb.addWorksheet("Contacts", { views: [{ state: "frozen", ySplit: 1 }] });
+  const ws = wb.addWorksheet("Cards", { views: [{ state: "frozen", ySplit: 1 }] });
   ws.columns = [...CONTACT_FIELDS, ...META_COLUMNS].map((c) => ({ header: c.label, key: c.key, width: c.width }));
   rows.forEach((r) => ws.addRow(r));
   const header1 = ws.getRow(1);
